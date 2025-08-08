@@ -10,6 +10,7 @@ import { RootStackParamList } from '../types/navigation';
 import theme from '../styles/theme';
 import Header from '../components/Header';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notificationService } from '../services/notification';
 
 type DoctorDashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'DoctorDashboard'>;
@@ -152,6 +153,9 @@ const DoctorDashboardScreen: React.FC = () => {
                       buttonStyle={styles.cancelButton}
                     />
                   </ButtonContainer>
+
+                  // Envia notificação para o médico
+                  await notificationService.notifyNewAppointment(selectedDoctor.id, newAppointment);
                 )}
               </ListItem.Content>
             </AppointmentCard>
