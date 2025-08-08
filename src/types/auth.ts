@@ -40,9 +40,10 @@ export interface AuthResponse {
 }
 
 export interface AuthContextData {
-    user: User | null;
-    loading: boolean;
-    signIn: (credentials: LoginCredentials) => Promise<void>;
-    register: (data: RegisterData) => Promise<void>;
-    signOut: () => Promise<void>;
+  user: User | null;
+  loading: boolean;
+  signIn: (credentials: LoginCredentials) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateUser: (user: User) => Promise<void>;
 }
