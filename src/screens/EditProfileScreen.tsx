@@ -11,7 +11,7 @@ import Header from '../components/Header';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type EditProfileScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, "EditProfile">;
 };
 
 const EditProfileScreen: React.FC = () => {
