@@ -10,10 +10,6 @@ import { RootStackParamList } from '../types/navigation';
 import theme from '../styles/theme';
 import Header from '../components/Header';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import StatisticsCard from '../components/StatisticsCard';
-import { statisticsService, Statistics } from '../services/statistics';
-import AppointmentActionModal from '../components/AppointmentActionModal';
-import { notificationService } from '../services/notification';
 
 type DoctorDashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'DoctorDashboard'>;
@@ -22,6 +18,7 @@ type DoctorDashboardScreenProps = {
 interface Appointment {
   id: string;
   patientId: string;
+  patientName: string;
   doctorId: string;
   doctorName: string;
   date: string;
@@ -61,10 +58,6 @@ const DoctorDashboardScreen: React.FC = () => {
   const navigation = useNavigation<DoctorDashboardScreenProps['navigation']>();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statistics, setStatistics] = useState<Statistics | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [actionType, setActionType] = useState<'confirm' | 'cancel'>('confirm');
 
   const loadAppointments = async () => {
     try {
@@ -76,10 +69,6 @@ const DoctorDashboardScreen: React.FC = () => {
         );
         setAppointments(doctorAppointments);
       }
-
-      // Carrega estatísticas
-      const stats = await statisticsService.getGeneralStatistics();
-      setStatistics(stats);
     } catch (error) {
       console.error('Erro ao carregar consultas:', error);
     } finally {
@@ -87,56 +76,25 @@ const DoctorDashboardScreen: React.FC = () => {
     }
   };
 
-  const handleOpenModal = (appointment: Appointment, action: 'confirm' | 'cancel') => {
-    setSelectedAppointment(appointment);
-    setActionType(action);
-    setModalVisible(true);
-  };
-
-  const handleCloseModal = () => {
-    setModalVisible(false);
-    setSelectedAppointment(null);
-  };
-
-  const handleConfirmAction = async (reason?: string) => {
-    if (!selectedAppointment) return;
-
+  const handleUpdateStatus = async (appointmentId: string, newStatus: 'confirmed' | 'cancelled') => {
     try {
       const storedAppointments = await AsyncStorage.getItem('@MedicalApp:appointments');
       if (storedAppointments) {
         const allAppointments: Appointment[] = JSON.parse(storedAppointments);
         const updatedAppointments = allAppointments.map(appointment => {
-          if (appointment.id === selectedAppointment.id) {
-            return { 
-              ...appointment, 
-              status: actionType === 'confirm' ? 'confirmed' : 'cancelled',
-              ...(reason && { cancelReason: reason })
-            };
+          if (appointment.id === appointmentId) {
+            return { ...appointment, status: newStatus };
           }
           return appointment;
         });
         await AsyncStorage.setItem('@MedicalApp:appointments', JSON.stringify(updatedAppointments));
-
-        // Envia notificação para o paciente
-        if (actionType === 'confirm') {
-          await notificationService.notifyAppointmentConfirmed(
-            selectedAppointment.patientId,
-            selectedAppointment
-          );
-        } else {
-          await notificationService.notifyAppointmentCancelled(
-            selectedAppointment.patientId,
-            selectedAppointment,
-            reason
-          );
-        }
-
         loadAppointments(); // Recarrega a lista
       }
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
     }
   };
+
   // Carrega as consultas quando a tela estiver em foco
   useFocusEffect(
     React.useCallback(() => {
@@ -157,59 +115,6 @@ const DoctorDashboardScreen: React.FC = () => {
           buttonStyle={styles.buttonStyle}
         />
 
-        <Button
-          title="Configurações"
-          onPress={() => navigation.navigate('Settings')}
-          containerStyle={styles.button as ViewStyle}
-          buttonStyle={styles.settingsButton}
-        />
-
-        <SectionTitle>Estatísticas Gerais</SectionTitle>
-        {statistics && (
-          <StatisticsGrid>
-            <StatisticsCard
-              title="Total de Consultas"
-              value={statistics.totalAppointments}
-              color={theme.colors.primary}
-              subtitle="Todas as consultas"
-            />
-            <StatisticsCard
-              title="Consultas Confirmadas"
-              value={statistics.confirmedAppointments}
-              color={theme.colors.success}
-              subtitle={`${statistics.statusPercentages.confirmed.toFixed(1)}% do total`}
-            />
-            <StatisticsCard
-              title="Pacientes Ativos"
-              value={statistics.totalPatients}
-              color={theme.colors.secondary}
-              subtitle="Pacientes únicos"
-            />
-            <StatisticsCard
-              title="Médicos Ativos"
-              value={statistics.totalDoctors}
-              color={theme.colors.warning}
-              subtitle="Médicos com consultas"
-            />
-          </StatisticsGrid>
-        )}
-
-        <SectionTitle>Especialidades Mais Procuradas</SectionTitle>
-        {statistics && Object.entries(statistics.specialties).length > 0 && (
-          <SpecialtyContainer>
-            {Object.entries(statistics.specialties)
-              .sort(([,a], [,b]) => b - a)
-              .slice(0, 3)
-              .map(([specialty, count]) => (
-                <SpecialtyItem key={specialty}>
-                  <SpecialtyName>{specialty}</SpecialtyName>
-                  <SpecialtyCount>{count} consultas</SpecialtyCount>
-                </SpecialtyItem>
-              ))
-            }
-          </SpecialtyContainer>
-        )}
-
         {loading ? (
           <LoadingText>Carregando consultas...</LoadingText>
         ) : appointments.length === 0 ? (
@@ -218,9 +123,15 @@ const DoctorDashboardScreen: React.FC = () => {
           appointments.map((appointment) => (
             <AppointmentCard key={appointment.id}>
               <ListItem.Content>
-                <ListItem.Title style={styles.dateTime as TextStyle}>
-                  {appointment.date} às {appointment.time}
+                <ListItem.Title style={styles.patientName as TextStyle}>
+                  Paciente: {appointment.patientName || 'Nome não disponível'}
                 </ListItem.Title>
+                <ListItem.Subtitle style={styles.dateTime as TextStyle}>
+                  {appointment.date} às {appointment.time}
+                </ListItem.Subtitle>
+                <Text style={styles.specialty as TextStyle}>
+                  {appointment.specialty}
+                </Text>
                 <StatusBadge status={appointment.status}>
                   <StatusText status={appointment.status}>
                     {getStatusText(appointment.status)}
@@ -230,13 +141,13 @@ const DoctorDashboardScreen: React.FC = () => {
                   <ButtonContainer>
                     <Button
                       title="Confirmar"
-                      onPress={() => handleOpenModal(appointment, 'confirm')}
+                      onPress={() => handleUpdateStatus(appointment.id, 'confirmed')}
                       containerStyle={styles.actionButton as ViewStyle}
                       buttonStyle={styles.confirmButton}
                     />
                     <Button
                       title="Cancelar"
-                      onPress={() => handleOpenModal(appointment, 'cancel')}
+                      onPress={() => handleUpdateStatus(appointment.id, 'cancelled')}
                       containerStyle={styles.actionButton as ViewStyle}
                       buttonStyle={styles.cancelButton}
                     />
@@ -253,22 +164,6 @@ const DoctorDashboardScreen: React.FC = () => {
           containerStyle={styles.button as ViewStyle}
           buttonStyle={styles.logoutButton}
         />
-
-        {selectedAppointment && (
-          <AppointmentActionModal
-            visible={modalVisible}
-            onClose={handleCloseModal}
-            onConfirm={handleConfirmAction}
-            actionType={actionType}
-            appointmentDetails={{
-              patientName: selectedAppointment.patientName,
-              doctorName: selectedAppointment.doctorName,
-              date: selectedAppointment.date,
-              time: selectedAppointment.time,
-              specialty: selectedAppointment.specialty,
-            }}
-          />
-        )}
       </ScrollView>
     </Container>
   );
@@ -307,9 +202,15 @@ const styles = {
     fontWeight: '700',
     color: theme.colors.text,
   },
-  settingsButton: {
-    backgroundColor: theme.colors.secondary,
-    paddingVertical: 12,
+  patientName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  specialty: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.text,
   },
 };
 
@@ -368,51 +269,5 @@ const ButtonContainer = styled.View`
   justify-content: space-between;
   margin-top: 8px;
 `;
-
-const StatisticsGrid = styled.View`
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  margin-bottom: 20px;
-`;
-
-const SpecialtyContainer = styled.View`
-  background-color: ${theme.colors.white};
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-  border-width: 1px;
-  border-color: ${theme.colors.border};
-`;
-
-const SpecialtyItem = styled.View`
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom-width: 1px;
-  border-bottom-color: ${theme.colors.border}20;
-`;
-
-const SpecialtyName = styled.Text`
-  font-size: 16px;
-  font-weight: 500;
-  color: ${theme.colors.text};
-`;
-
-const SpecialtyCount = styled.Text`
-  font-size: 14px;
-  color: ${theme.colors.primary};
-  font-weight: 600;
-`;
-
-const SectionTitle = styled.Text`
-  font-size: 20px;
-  font-weight: bold;
-  color: ${theme.colors.text};
-  margin-bottom: 15px;
-  margin-top: 10px;
-`;
-
 
 export default DoctorDashboardScreen; 

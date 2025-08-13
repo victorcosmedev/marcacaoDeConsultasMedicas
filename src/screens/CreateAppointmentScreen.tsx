@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import styled from 'styled-components/native';
-import { ScrollView, ViewStyle, TextStyle } from 'react-native';
-import { Button, ListItem, Text } from 'react-native-elements';
+import { ScrollView, ViewStyle } from 'react-native';
+import { Button, Input } from 'react-native-elements';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import theme from '../styles/theme';
 import Header from '../components/Header';
+import DoctorList from '../components/DoctorList';
+import TimeSlotList from '../components/TimeSlotList';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { notificationService } from '../services/notification';
 
-type DoctorDashboardScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'DoctorDashboard'>;
+type CreateAppointmentScreenProps = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'CreateAppointment'>;
 };
 
 interface Appointment {
@@ -28,145 +28,140 @@ interface Appointment {
   status: 'pending' | 'confirmed' | 'cancelled';
 }
 
-interface StyledProps {
-  status: string;
+interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  image: string;
 }
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'confirmed':
-      return theme.colors.success;
-    case 'cancelled':
-      return theme.colors.error;
-    default:
-      return theme.colors.warning;
-  }
-};
+// Lista de médicos disponíveis
+const availableDoctors: Doctor[] = [
+  {
+    id: '1',
+    name: 'Dr. João Silva',
+    specialty: 'Cardiologia',
+    image: 'https://randomuser.me/api/portraits/men/1.jpg',
+  },
+  {
+    id: '2',
+    name: 'Dra. Maria Santos',
+    specialty: 'Pediatria',
+    image: 'https://randomuser.me/api/portraits/women/1.jpg',
+  },
+  {
+    id: '3',
+    name: 'Dr. Pedro Oliveira',
+    specialty: 'Ortopedia',
+    image: 'https://randomuser.me/api/portraits/men/2.jpg',
+  },
+  {
+    id: '4',
+    name: 'Dra. Ana Costa',
+    specialty: 'Dermatologia',
+    image: 'https://randomuser.me/api/portraits/women/2.jpg',
+  },
+  {
+    id: '5',
+    name: 'Dr. Carlos Mendes',
+    specialty: 'Oftalmologia',
+    image: 'https://randomuser.me/api/portraits/men/3.jpg',
+  },
+];
 
-const getStatusText = (status: string) => {
-  switch (status) {
-    case 'confirmed':
-      return 'Confirmada';
-    case 'cancelled':
-      return 'Cancelada';
-    default:
-      return 'Pendente';
-  }
-};
+const CreateAppointmentScreen: React.FC = () => {
+  const { user } = useAuth();
+  const navigation = useNavigation<CreateAppointmentScreenProps['navigation']>();
+  const [date, setDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-const DoctorDashboardScreen: React.FC = () => {
-  const { user, signOut } = useAuth();
-  const navigation = useNavigation<DoctorDashboardScreenProps['navigation']>();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadAppointments = async () => {
+  const handleCreateAppointment = async () => {
     try {
-      const storedAppointments = await AsyncStorage.getItem('@MedicalApp:appointments');
-      if (storedAppointments) {
-        const allAppointments: Appointment[] = JSON.parse(storedAppointments);
-        const doctorAppointments = allAppointments.filter(
-          (appointment) => appointment.doctorId === user?.id
-        );
-        setAppointments(doctorAppointments);
+      setLoading(true);
+      setError('');
+
+      if (!date || !selectedTime || !selectedDoctor) {
+        setError('Por favor, preencha a data e selecione um médico e horário');
+        return;
       }
-    } catch (error) {
-      console.error('Erro ao carregar consultas:', error);
+
+      // Recupera consultas existentes
+      const storedAppointments = await AsyncStorage.getItem('@MedicalApp:appointments');
+      const appointments: Appointment[] = storedAppointments ? JSON.parse(storedAppointments) : [];
+
+      // Cria nova consulta
+      const newAppointment: Appointment = {
+        id: Date.now().toString(),
+        patientId: user?.id || '',
+        patientName: user?.name || '',
+        doctorId: selectedDoctor.id,
+        doctorName: selectedDoctor.name,
+        date,
+        time: selectedTime,
+        specialty: selectedDoctor.specialty,
+        status: 'pending',
+      };
+
+      // Adiciona nova consulta à lista
+      appointments.push(newAppointment);
+
+      // Salva lista atualizada
+      await AsyncStorage.setItem('@MedicalApp:appointments', JSON.stringify(appointments));
+
+      alert('Consulta agendada com sucesso!');
+      navigation.goBack();
+    } catch (err) {
+      setError('Erro ao agendar consulta. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateStatus = async (appointmentId: string, newStatus: 'confirmed' | 'cancelled') => {
-    try {
-      const storedAppointments = await AsyncStorage.getItem('@MedicalApp:appointments');
-      if (storedAppointments) {
-        const allAppointments: Appointment[] = JSON.parse(storedAppointments);
-        const updatedAppointments = allAppointments.map(appointment => {
-          if (appointment.id === appointmentId) {
-            return { ...appointment, status: newStatus };
-          }
-          return appointment;
-        });
-        await AsyncStorage.setItem('@MedicalApp:appointments', JSON.stringify(updatedAppointments));
-        loadAppointments(); // Recarrega a lista
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error);
-    }
-  };
-
-  // Carrega as consultas quando a tela estiver em foco
-  useFocusEffect(
-    React.useCallback(() => {
-      loadAppointments();
-    }, [])
-  );
-
   return (
     <Container>
       <Header />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Title>Minhas Consultas</Title>
+        <Title>Agendar Consulta</Title>
+
+        <Input
+          placeholder="Data (DD/MM/AAAA)"
+          value={date}
+          onChangeText={setDate}
+          containerStyle={styles.input}
+          keyboardType="numeric"
+        />
+
+        <SectionTitle>Selecione um Horário</SectionTitle>
+        <TimeSlotList
+          onSelectTime={setSelectedTime}
+          selectedTime={selectedTime}
+        />
+
+        <SectionTitle>Selecione um Médico</SectionTitle>
+        <DoctorList
+          doctors={availableDoctors}
+          onSelectDoctor={setSelectedDoctor}
+          selectedDoctorId={selectedDoctor?.id}
+        />
+
+        {error ? <ErrorText>{error}</ErrorText> : null}
 
         <Button
-          title="Meu Perfil"
-          onPress={() => navigation.navigate('Profile')}
+          title="Agendar"
+          onPress={handleCreateAppointment}
+          loading={loading}
           containerStyle={styles.button as ViewStyle}
           buttonStyle={styles.buttonStyle}
         />
 
-        {loading ? (
-          <LoadingText>Carregando consultas...</LoadingText>
-        ) : appointments.length === 0 ? (
-          <EmptyText>Nenhuma consulta agendada</EmptyText>
-        ) : (
-          appointments.map((appointment) => (
-            <AppointmentCard key={appointment.id}>
-              <ListItem.Content>
-                <ListItem.Title style={styles.patientName as TextStyle}>
-                  Paciente: {appointment.patientName || 'Nome não disponível'}
-                </ListItem.Title>
-                <ListItem.Subtitle style={styles.dateTime as TextStyle}>
-                  {appointment.date} às {appointment.time}
-                </ListItem.Subtitle>
-                <Text style={styles.specialty as TextStyle}>
-                  {appointment.specialty}
-                </Text>
-                <StatusBadge status={appointment.status}>
-                  <StatusText status={appointment.status}>
-                    {getStatusText(appointment.status)}
-                  </StatusText>
-                </StatusBadge>
-                {appointment.status === 'pending' && (
-                  <ButtonContainer>
-                    <Button
-                      title="Confirmar"
-                      onPress={() => handleUpdateStatus(appointment.id, 'confirmed')}
-                      containerStyle={styles.actionButton as ViewStyle}
-                      buttonStyle={styles.confirmButton}
-                    />
-                    <Button
-                      title="Cancelar"
-                      onPress={() => handleUpdateStatus(appointment.id, 'cancelled')}
-                      containerStyle={styles.actionButton as ViewStyle}
-                      buttonStyle={styles.cancelButton}
-                    />
-                  </ButtonContainer>
-
-                  // Envia notificação para o médico
-                  await notificationService.notifyNewAppointment(selectedDoctor.id, newAppointment);
-                )}
-              </ListItem.Content>
-            </AppointmentCard>
-          ))
-        )}
-
         <Button
-          title="Sair"
-          onPress={signOut}
+          title="Cancelar"
+          onPress={() => navigation.goBack()}
           containerStyle={styles.button as ViewStyle}
-          buttonStyle={styles.logoutButton}
+          buttonStyle={styles.cancelButton}
         />
       </ScrollView>
     </Container>
@@ -177,44 +172,20 @@ const styles = {
   scrollContent: {
     padding: 20,
   },
+  input: {
+    marginBottom: 15,
+  },
   button: {
-    marginBottom: 20,
+    marginTop: 10,
     width: '100%',
   },
   buttonStyle: {
     backgroundColor: theme.colors.primary,
     paddingVertical: 12,
   },
-  logoutButton: {
-    backgroundColor: theme.colors.error,
-    paddingVertical: 12,
-  },
-  patientName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  specialty: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.text,
-  },
-  actionButton: {
-    marginTop: 8,
-    width: '48%',
-  },
-  confirmButton: {
-    backgroundColor: theme.colors.success,
-    paddingVertical: 8,
-  },
   cancelButton: {
-    backgroundColor: theme.colors.error,
-    paddingVertical: 8,
-  },
-  dateTime: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
+    backgroundColor: theme.colors.secondary,
+    paddingVertical: 12,
   },
 };
 
@@ -231,47 +202,18 @@ const Title = styled.Text`
   text-align: center;
 `;
 
-const AppointmentCard = styled(ListItem)`
-  background-color: ${theme.colors.background};
-  border-radius: 8px;
+const SectionTitle = styled.Text`
+  font-size: 18px;
+  font-weight: bold;
+  color: ${theme.colors.text};
   margin-bottom: 10px;
-  padding: 15px;
-  border-width: 1px;
-  border-color: ${theme.colors.border};
+  margin-top: 10px;
 `;
 
-const LoadingText = styled.Text`
+const ErrorText = styled.Text`
+  color: ${theme.colors.error};
   text-align: center;
-  color: ${theme.colors.text};
-  font-size: 16px;
-  margin-top: 20px;
+  margin-bottom: 10px;
 `;
 
-const EmptyText = styled.Text`
-  text-align: center;
-  color: ${theme.colors.text};
-  font-size: 16px;
-  margin-top: 20px;
-`;
-
-const StatusBadge = styled.View<StyledProps>`
-  background-color: ${(props: StyledProps) => getStatusColor(props.status) + '20'};
-  padding: 4px 8px;
-  border-radius: 4px;
-  align-self: flex-start;
-  margin-top: 8px;
-`;
-
-const StatusText = styled.Text<StyledProps>`
-  color: ${(props: StyledProps) => getStatusColor(props.status)};
-  font-size: 12px;
-  font-weight: 500;
-`;
-
-const ButtonContainer = styled.View`
-  flex-direction: row;
-  justify-content: space-between;
-  margin-top: 8px;
-`;
-
-export default DoctorDashboardScreen; 
+export default CreateAppointmentScreen;

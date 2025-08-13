@@ -3,9 +3,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types/navigation';
-import EditProfileScreen from '../screens/EditProfileScreen';
-import NotificationsScreen from '../screens/NotificationScreen';
-import SettingsScreen from '../screens/SettingsScreen';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -82,24 +79,9 @@ export const AppNavigator: React.FC = () => {
               component={ProfileScreen}
               options={{ title: 'Perfil' }}
             />
-            <Stack.Screen 
-              name="EditProfile" 
-              component={EditProfileScreen}
-              options={{ title: 'Editar Perfil' }}
-            />
-            <Stack.Screen 
-              name="Notifications" 
-              component={NotificationsScreen}
-              options={{ title: 'Notificações' }}
-            />
-            <Stack.Screen 
-              name="Settings" 
-              component={SettingsScreen}
-              options={{ title: 'Configurações' }}
-            />
           </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
-};
+}; 
